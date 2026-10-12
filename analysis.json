@@ -1,0 +1,9 @@
+{
+  "input_sha256": "fbef4f7346d90102281bc22da566f41486f29e990600a2bab86d1ae5f3e78ce7",
+  "status": "experimental macOS utun client; privileged integration and browser access pending",
+  "offline_tests": 13,
+  "tls_verified": true,
+  "authentication_config_verified": true,
+  "target_tcp_syn_ack_verified": true,
+  "utun_runtime_verified": false
+}

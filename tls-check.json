@@ -1,0 +1,9 @@
+{
+  "date": "2026-10-12",
+  "endpoint": "vpn.example.com:10443",
+  "runtime": "local Python ssl.create_default_context",
+  "tls": "TLSv1.2",
+  "certificate_verified": true,
+  "credentials_sent": false,
+  "vpn_authenticated": false
+}
