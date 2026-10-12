@@ -4,14 +4,14 @@ import UniformTypeIdentifiers
 final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var window: NSWindow!
     
-    // Configuration Fields
+    // Configuration Fields (Empty by default for complete sanitization)
     let serverField = NSTextField()
     let portField = NSTextField()
     let loginPathField = NSTextField()
     
     // Status & Feedback
     let statusLabel = NSTextField(labelWithString: "未连接")
-    let detailLabel = NSTextField(wrappingLabelWithString: "配置服务器参数后，点击“① 打开 VPN 登录页”进行登录。")
+    let detailLabel = NSTextField(wrappingLabelWithString: "请在上方输入服务器地址和端口，或登录 VPN 网页后点击“连接”。")
     let pathLabel = NSTextField(labelWithString: "")
     let connectButton = NSButton(title: "连接 VPN", target: nil, action: nil)
     let logView = NSTextView()
@@ -45,6 +45,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         field.placeholderString = placeholder
         field.font = .systemFont(ofSize: 12)
         field.bezelStyle = .roundedBezel
+        field.isEditable = true
+        field.isSelectable = true
         field.translatesAutoresizingMaskIntoConstraints = false
         field.widthAnchor.constraint(equalToConstant: 450).isActive = true
         
@@ -59,14 +61,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         
-        // Menu bar
-        let mainMenu = NSMenu()
-        let appMenuItem = NSMenuItem()
-        mainMenu.addItem(appMenuItem)
-        let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "退出 UTM SSLVPN", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        appMenuItem.submenu = appMenu
-        NSApp.mainMenu = mainMenu
+        // Setup Main Menu with standard Edit menu to enable ⌘V, ⌘C, ⌘X, ⌘A
+        setupMainMenu()
         
         loadInitialConfig()
         
@@ -117,7 +113,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         
         container.addArrangedSubview(makeFieldRow(labelText: "服务器地址:", field: serverField, placeholder: "例如: 118.249.86.190 或 vpn.example.com"))
         container.addArrangedSubview(makeFieldRow(labelText: "隧道端口:", field: portField, placeholder: "例如: 10443"))
-        container.addArrangedSubview(makeFieldRow(labelText: "登录页路径:", field: loginPathField, placeholder: "默认为: /internal-server/pages/index.html"))
+        container.addArrangedSubview(makeFieldRow(labelText: "登录页路径:", field: loginPathField, placeholder: "/internal-server/pages/index.html (留空使用默认)"))
         
         // Action Buttons
         let loginButton = NSButton(title: "① 打开 VPN 登录页", target: self, action: #selector(openLoginPage))
@@ -180,48 +176,62 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
     
-    // MARK: - Configuration Handling
+    // MARK: - Menu Setup with Edit/Clipboard support
+    func setupMainMenu() {
+        let mainMenu = NSMenu()
+        
+        // App Menu
+        let appMenuItem = NSMenuItem()
+        mainMenu.addItem(appMenuItem)
+        let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "关于 UTM SSLVPN", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(NSMenuItem.separator())
+        appMenu.addItem(withTitle: "退出 UTM SSLVPN", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenuItem.submenu = appMenu
+        
+        // Standard Edit Menu for Cut/Copy/Paste/SelectAll/Undo
+        let editMenuItem = NSMenuItem()
+        mainMenu.addItem(editMenuItem)
+        let editMenu = NSMenu(title: "编辑")
+        editMenu.addItem(withTitle: "撤销", action: Selector(("undo:")), keyEquivalent: "z")
+        editMenu.addItem(withTitle: "重做", action: Selector(("redo:")), keyEquivalent: "Z")
+        editMenu.addItem(NSMenuItem.separator())
+        editMenu.addItem(withTitle: "剪切", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "复制", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "粘贴", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "全选", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editMenuItem.submenu = editMenu
+        
+        NSApp.mainMenu = mainMenu
+    }
+    
+    // MARK: - Configuration Handling (Desensitized, no hardcoded defaults)
     func loadInitialConfig() {
         let defaults = UserDefaults.standard
-        let savedServer = defaults.string(forKey: "server") ?? ""
-        let savedPort = defaults.string(forKey: "port") ?? ""
-        let savedLoginPath = defaults.string(forKey: "login_path") ?? "/internal-server/pages/index.html"
         pagePath = defaults.string(forKey: "page") ?? (NSHomeDirectory() + "/Desktop/SSLVPN 客户端.html")
         
-        if !savedServer.isEmpty {
-            serverField.stringValue = savedServer
-            portField.stringValue = savedPort
-            loginPathField.stringValue = savedLoginPath
-            return
+        // Clear previous legacy hardcoded values if any
+        if defaults.string(forKey: "server") == "118.249.86.190" {
+            defaults.removeObject(forKey: "server")
+            defaults.removeObject(forKey: "port")
+            defaults.removeObject(forKey: "login_path")
+            defaults.removeObject(forKey: "target_url")
         }
         
-        let searchURLs = [
-            Bundle.main.resourceURL?.appendingPathComponent("config.json"),
-            Bundle.main.bundleURL.deletingLastPathComponent().appendingPathComponent("config.json")
-        ].compactMap { $0 }
-        
-        for url in searchURLs {
-            if let data = try? Data(contentsOf: url),
-               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                if let s = json["server"] as? String { serverField.stringValue = s }
-                if let p = json["port"] as? Int, p > 0 { portField.stringValue = String(p) }
-                if let lp = json["login_path"] as? String { loginPathField.stringValue = lp }
-                if let dp = json["default_page"] as? String, !dp.isEmpty {
-                    pagePath = (dp as NSString).expandingTildeInPath
-                }
-                break
-            }
-        }
-        if loginPathField.stringValue.isEmpty {
-            loginPathField.stringValue = "/internal-server/pages/index.html"
-        }
+        // By default, start with clean, blank input fields
+        serverField.stringValue = defaults.string(forKey: "server") ?? ""
+        portField.stringValue = defaults.string(forKey: "port") ?? ""
+        loginPathField.stringValue = defaults.string(forKey: "login_path") ?? ""
     }
     
     func persistCurrentConfig() {
         let defaults = UserDefaults.standard
-        defaults.set(serverField.stringValue.trimmingCharacters(in: .whitespaces), forKey: "server")
-        defaults.set(portField.stringValue.trimmingCharacters(in: .whitespaces), forKey: "port")
-        defaults.set(loginPathField.stringValue.trimmingCharacters(in: .whitespaces), forKey: "login_path")
+        let s = serverField.stringValue.trimmingCharacters(in: .whitespaces)
+        let p = portField.stringValue.trimmingCharacters(in: .whitespaces)
+        let lp = loginPathField.stringValue.trimmingCharacters(in: .whitespaces)
+        if !s.isEmpty { defaults.set(s, forKey: "server") }
+        if !p.isEmpty { defaults.set(p, forKey: "port") }
+        if !lp.isEmpty { defaults.set(lp, forKey: "login_path") }
         defaults.set(pagePath, forKey: "page")
     }
     
@@ -275,10 +285,11 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let server = serverField.stringValue.trimmingCharacters(in: .whitespaces)
         let portStr = portField.stringValue.trimmingCharacters(in: .whitespaces)
         var path = loginPathField.stringValue.trimmingCharacters(in: .whitespaces)
+        if path.isEmpty { path = "/internal-server/pages/index.html" }
         if !path.hasPrefix("/") { path = "/" + path }
         
         guard !server.isEmpty, let port = Int(portStr), port > 0 else {
-            detailLabel.stringValue = "请先填写有效的服务器地址和端口。"
+            detailLabel.stringValue = "请先填写服务器地址和端口（支持直接从剪贴板粘贴 ⌘+V）。"
             return
         }
         
@@ -368,15 +379,17 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             try Data(connLink.utf8).write(to: linkFile, options: .atomic)
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: linkFile.path)
             
-            // Create config.json in temp dir
+            // Create config.json in temp dir if server/port provided
             let server = serverField.stringValue.trimmingCharacters(in: .whitespaces)
             let port = Int(portField.stringValue.trimmingCharacters(in: .whitespaces)) ?? 0
-            let configDict: [String: Any] = [
-                "server": server,
-                "port": port
-            ]
-            let configJsonData = try JSONSerialization.data(withJSONObject: configDict, options: .prettyPrinted)
-            try configJsonData.write(to: tempDir.appendingPathComponent("config.json"))
+            var configDict: [String: Any] = [:]
+            if !server.isEmpty { configDict["server"] = server }
+            if port > 0 { configDict["port"] = port }
+            
+            if !configDict.isEmpty {
+                let configJsonData = try JSONSerialization.data(withJSONObject: configDict, options: .prettyPrinted)
+                try configJsonData.write(to: tempDir.appendingPathComponent("config.json"))
+            }
             
             for file in ["worker.py", "mac_vpn.py", "protocol.py"] {
                 try FileManager.default.copyItem(at: resources.appendingPathComponent(file), to: tempDir.appendingPathComponent(file))

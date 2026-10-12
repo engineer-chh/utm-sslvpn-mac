@@ -18,10 +18,8 @@ cp "${SCRIPT_DIR}/gui/repair.py" "${APP_DIR}/Contents/Resources/repair.py"
 cp "${SCRIPT_DIR}/mac_vpn.py" "${APP_DIR}/Contents/Resources/mac_vpn.py"
 cp "${SCRIPT_DIR}/protocol.py" "${APP_DIR}/Contents/Resources/protocol.py"
 
-if [ -f "${SCRIPT_DIR}/config.json" ]; then
-    cp "${SCRIPT_DIR}/config.json" "${APP_DIR}/Contents/Resources/config.json"
-elif [ -f "${SCRIPT_DIR}/config.example.json" ]; then
-    cp "${SCRIPT_DIR}/config.example.json" "${APP_DIR}/Contents/Resources/config.json"
+if [ -f "${SCRIPT_DIR}/gui/AppIcon.icns" ]; then
+    cp "${SCRIPT_DIR}/gui/AppIcon.icns" "${APP_DIR}/Contents/Resources/AppIcon.icns"
 fi
 
 # 2. 编译 Swift 图形界面
@@ -31,9 +29,20 @@ echo "==> 正在编译 Swift 源代码..."
     -o "${APP_DIR}/Contents/MacOS/SimpleVPN" \
     -target arm64-apple-macosx13.0
 
-# 3. 本地临时代码签名（消除 macOS 安全隔离限制）
+# 3. 本地临时代码签名（消除 macOS 安全隔离限制并应用新图标）
 echo "==> 正在对应用进行本地代码签名..."
 /usr/bin/codesign --force --deep --sign - "${APP_DIR}"
+
+# 4. 同步更新 outputs 目录下的旧版应用，避免用户点开旧文件
+OUTPUTS_APP="${SCRIPT_DIR}/../outputs/轻松VPN-0.2.3.app"
+if [ -d "${OUTPUTS_APP}" ]; then
+    echo "==> 正在同步更新 outputs 目录下的应用..."
+    rm -rf "${OUTPUTS_APP}"
+    cp -R "${APP_DIR}" "${OUTPUTS_APP}"
+fi
+
+# 刷新 Finder 图标缓存
+touch "${APP_DIR}"
 
 echo "==> 构建成功！生成应用路径："
 echo "    ${APP_DIR}"
