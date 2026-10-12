@@ -36,6 +36,28 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         )
     }
     
+    func makeFieldRow(labelText: String, field: NSTextField, placeholder: String) -> NSStackView {
+        let label = NSTextField(labelWithString: labelText)
+        label.alignment = .right
+        label.font = .systemFont(ofSize: 12)
+        label.textColor = .secondaryLabelColor
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.widthAnchor.constraint(equalToConstant: 90).isActive = true
+        
+        field.placeholderString = placeholder
+        field.font = .systemFont(ofSize: 12)
+        field.bezelStyle = .roundedBezel
+        field.translatesAutoresizingMaskIntoConstraints = false
+        field.widthAnchor.constraint(equalToConstant: 450).isActive = true
+        
+        let row = NSStackView(views: [label, field])
+        row.orientation = .horizontal
+        row.alignment = .firstBaseline
+        row.spacing = 10
+        row.translatesAutoresizingMaskIntoConstraints = false
+        return row
+    }
+    
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         
@@ -52,7 +74,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         
         // Main Window setup
         window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 640, height: 680),
+            contentRect: NSRect(x: 0, y: 0, width: 620, height: 680),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -64,24 +86,24 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let container = NSStackView()
         container.orientation = .vertical
         container.alignment = .leading
-        container.spacing = 14
+        container.spacing = 12
         container.translatesAutoresizingMaskIntoConstraints = false
         window.contentView!.addSubview(container)
         
         NSLayoutConstraint.activate([
-            container.leadingAnchor.constraint(equalTo: window.contentView!.leadingAnchor, constant: 24),
-            container.trailingAnchor.constraint(equalTo: window.contentView!.trailingAnchor, constant: -24),
-            container.topAnchor.constraint(equalTo: window.contentView!.topAnchor, constant: 20),
+            container.leadingAnchor.constraint(equalTo: window.contentView!.leadingAnchor, constant: 28),
+            container.trailingAnchor.constraint(equalTo: window.contentView!.trailingAnchor, constant: -28),
+            container.topAnchor.constraint(equalTo: window.contentView!.topAnchor, constant: 22),
             container.bottomAnchor.constraint(equalTo: window.contentView!.bottomAnchor, constant: -20)
         ])
         
         // Title
-        let headerLabel = NSTextField(labelWithString: "UTM SSLVPN · macOS 客户端")
-        headerLabel.font = .systemFont(ofSize: 22, weight: .bold)
+        let headerLabel = NSTextField(labelWithString: "轻松连接 · 内网办公")
+        headerLabel.font = .systemFont(ofSize: 24, weight: .semibold)
         container.addArrangedSubview(headerLabel)
         
         // Status & Detail
-        statusLabel.font = .systemFont(ofSize: 17, weight: .semibold)
+        statusLabel.font = .systemFont(ofSize: 18, weight: .semibold)
         statusLabel.textColor = .secondaryLabelColor
         container.addArrangedSubview(statusLabel)
         
@@ -89,31 +111,16 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         detailLabel.maximumNumberOfLines = 3
         container.addArrangedSubview(detailLabel)
         
-        // Config Box
-        let configBox = NSBox()
-        configBox.title = "连接参数配置"
-        configBox.translatesAutoresizingMaskIntoConstraints = false
+        // Configuration Section
+        let configSectionTitle = NSTextField(labelWithString: "连接参数配置：")
+        configSectionTitle.font = .systemFont(ofSize: 13, weight: .bold)
+        configSectionTitle.textColor = .labelColor
+        container.addArrangedSubview(configSectionTitle)
         
-        let configGrid = NSGridView(views: [
-            [NSTextField(labelWithString: "服务器地址:"), serverField],
-            [NSTextField(labelWithString: "隧道端口:"), portField],
-            [NSTextField(labelWithString: "登录页路径:"), loginPathField],
-            [NSTextField(labelWithString: "工作系统 URL:"), targetUrlField]
-        ])
-        configGrid.rowSpacing = 8
-        configGrid.columnSpacing = 12
-        configGrid.translatesAutoresizingMaskIntoConstraints = false
-        configBox.contentView = configGrid
-        
-        container.addArrangedSubview(configBox)
-        configBox.widthAnchor.constraint(equalTo: container.widthAnchor).isActive = true
-        serverField.widthAnchor.constraint(greaterThanOrEqualToConstant: 380).isActive = true
-        
-        // Setup fields
-        serverField.placeholderString = "例如: 118.249.86.190 或 vpn.example.com"
-        portField.placeholderString = "例如: 10443"
-        loginPathField.placeholderString = "/internal-server/pages/index.html"
-        targetUrlField.placeholderString = "例如: http://192.168.0.62:8090/mc/login-mc.html"
+        container.addArrangedSubview(makeFieldRow(labelText: "服务器地址:", field: serverField, placeholder: "例如: 118.249.86.190 或 vpn.example.com"))
+        container.addArrangedSubview(makeFieldRow(labelText: "隧道端口:", field: portField, placeholder: "例如: 10443"))
+        container.addArrangedSubview(makeFieldRow(labelText: "登录页路径:", field: loginPathField, placeholder: "默认为: /internal-server/pages/index.html"))
+        container.addArrangedSubview(makeFieldRow(labelText: "工作系统 URL:", field: targetUrlField, placeholder: "例如: http://192.168.0.62:8090/mc/login-mc.html"))
         
         // Buttons
         let loginButton = NSButton(title: "① 打开 VPN 登录页", target: self, action: #selector(openLoginPage))
@@ -131,6 +138,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         openWorkButton.isEnabled = false
         
         let actionRow = NSStackView(views: [connectButton, openWorkButton])
+        actionRow.orientation = .horizontal
+        actionRow.alignment = .centerY
         actionRow.spacing = 12
         container.addArrangedSubview(actionRow)
         
@@ -142,6 +151,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         chooseFileButton.bezelStyle = .rounded
         
         let subRow = NSStackView(views: [repairButton, chooseFileButton])
+        subRow.orientation = .horizontal
+        subRow.alignment = .centerY
         subRow.spacing = 12
         container.addArrangedSubview(subRow)
         
@@ -161,11 +172,13 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         logView.autoresizingMask = [.width]
         logView.textContainer!.widthTracksTextView = true
         
+        scroll.setContentHuggingPriority(.defaultLow, for: .vertical)
+        scroll.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
         container.addArrangedSubview(scroll)
         scroll.widthAnchor.constraint(equalTo: container.widthAnchor).isActive = true
-        scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 120).isActive = true
+        scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 90).isActive = true
         
-        let footerTip = NSTextField(labelWithString: "提示：保持应用打开。点击“断开”或按 ⌘+Q 退出应用即可安全结束连接并清理路由。")
+        let footerTip = NSTextField(labelWithString: "保持应用打开。点击“断开”或退出应用即可结束连接。")
         footerTip.font = .systemFont(ofSize: 11)
         footerTip.textColor = .secondaryLabelColor
         container.addArrangedSubview(footerTip)
