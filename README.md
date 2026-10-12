@@ -1,57 +1,86 @@
 # UTM SSLVPN for macOS (utmssl-mac)
 
-纯 Python 实现的轻量级 macOS UTM3.0 SSLVPN 客户端。无需安装第三方 Python 依赖（使用系统原生 Python 3 与 `utun` 虚拟网卡），开箱即用。
+纯原生、零外部依赖的 macOS UTM3.0 SSLVPN 客户端，提供 **原生图形界面 (App)** 与 **轻量级命令行 (CLI)** 双模式支持。
 
----
-
-## 特性
-
-- **零外部依赖**：基于 macOS 自带的 `/usr/bin/python3`，无需 `pip install`。
-- **系统原生虚拟网卡**：基于 macOS 原生 `utun` 控制接口收发 IPv4 数据包。
-- **安全与分流**：
+- **原生 GUI 交互**：内置 Swift 开发的 Cocoa 图形界面，支持在窗口内直接配置服务器、端口与业务地址，支持浏览器 `utmssl://` 协议回调自动捕获会话。
+- **零外部依赖**：基于 macOS 自带的 `/usr/bin/python3` 与原生系统网络接口（`utun` 虚拟网卡），无需 `pip install` 任何第三方包。
+- **一键打包**：提供自动化构建脚本，利用系统自带的 `swiftc` 编译器即可秒级构建独立的 `.app` 应用程序。
+- **安全与私网分流**：
   - 强制 TLS 1.2+ 及标准证书验证，不弱化网络安全。
   - 严格限制为服务端下发的私网路由（RFC 1918），拒绝默认路由劫持与公网路由接管。
-  - 正常断开（Ctrl+C）时自动删除添加的路由并关闭 `utun` 网卡。
-- **灵活配置**：支持从保存的登录网页自动提取参数，或通过命令行参数 / `config.json` 指定服务器、端口及业务跳转。
+  - 正常断开连接或退出应用时，自动清理添加的临时私网路由并关闭虚拟网卡。
 
 ---
 
-## 快速使用
+## 快速开始
 
-### 1. 配置（可选）
+### 方式一：使用原生图形界面 (GUI App) — 推荐
 
-如需固定配置，可将 `config.example.json` 复制为 `config.json` 并修改：
+#### 1. 一键编译生成应用
+在项目根目录下执行构建脚本（首次运行或拉取更新后）：
 
+```bash
+./build_app.sh
+```
+
+脚本将利用 macOS 自带的 Swift 编译器在当前目录生成 **`UTM_SSLVPN.app`**。您可以直接双击运行，或将其拖入 `/Applications` 文件夹。
+
+#### 2. 在图形界面中配置与连接
+1. **配置参数**：
+   - 打开应用后，在“连接参数配置”区域填入：
+     - **服务器地址**：例如 `118.249.86.190` 或 VPN 域名
+     - **隧道端口**：例如 `10443`
+     - **工作系统 URL**：连接成功后需要访问的内网业务地址（例如 `http://192.168.0.62:8090/mc/login-mc.html`）
+   - 参数会在连接时自动保存至 macOS 用户偏好中，下次打开自动加载。
+2. **日常连接流程**：
+   - 点击 **“① 打开 VPN 登录页”**，浏览器将自动弹出公司 VPN 门户。
+   - 在网页中正常输入账号、密码并登录。
+   - 登录成功后，在网页上点击“连接”，浏览器会询问是否允许打开应用，点击允许。
+   - 回到应用界面，点击 **“连接 VPN”**，在 macOS 授权弹窗中输入锁屏密码。
+   - 界面变为 **“● 已连接”** 后，点击旁边亮起的 **“打开工作系统”** 即可直接访问内网。
+3. **断开连接**：
+   - 点击界面上的 **“断开 VPN”** 或直接按 `⌘ + Q` 退出应用，程序将自动还原网络路由与虚拟网卡。
+
+---
+
+### 方式二：使用命令行模式 (CLI)
+
+如果您习惯使用终端，也可以脱离图形界面直接运行：
+
+#### 1. 配置文件（可选）
+复制模板文件 `config.example.json` 为 `config.json`：
 ```bash
 cp config.example.json config.json
 ```
-
-`config.json` 示例：
+填入您的网关参数：
 ```json
 {
-  "server": "vpn.example.com",
+  "server": "118.249.86.190",
   "port": 10443,
-  "target_url": "http://10.0.0.2:8080",
+  "target_url": "http://192.168.0.62:8090/mc/login-mc.html",
   "default_page": "~/Desktop/SSLVPN 客户端.html"
 }
 ```
 
-### 2. 获取会话并连接
-
-1. 在浏览器打开 VPN 登录门户完成登录认证。
-2. 将认证成功的连接页面按 `⌘ + S` 保存完整网页到本地（例如桌面：`SSLVPN 客户端.html`，保留同名资源文件夹）。
-3. 启动客户端（创建 `utun` 网卡及配置路由需要管理员权限）：
-
+#### 2. 运行连接
 ```bash
+# 自动读取保存的网页
 sudo /usr/bin/python3 mac_vpn.py --page "$HOME/Desktop/SSLVPN 客户端.html"
+
+# 或直接传入 utmssl 链接
+sudo /usr/bin/python3 mac_vpn.py --link "utmssl://服务器:端口/conn?会话值"
+
+# 或直接在访达中双击
+双击 "启动VPN.command"
 ```
 
-也可直接通过双击 `启动VPN.command` 运行。
+---
 
-### 3. 高级命令行参数
+## 命令行高级参数
 
 ```text
 用法: mac_vpn.py [-h] [--config CONFIG] [--page PAGE] [--link LINK]
+                  [--link-file LINK_FILE] [--control-dir CONTROL_DIR]
                   [--server SERVER] [--port PORT] [--target-url TARGET_URL] [--probe]
 
 可选参数:
@@ -68,17 +97,15 @@ sudo /usr/bin/python3 mac_vpn.py --page "$HOME/Desktop/SSLVPN 客户端.html"
 
 ## 运行测试
 
-离线协议及配置单元测试：
+运行离线协议与配置解析单元测试：
 
 ```bash
-python3 test_protocol.py
-python3 test_mac_vpn.py
+python3 -m unittest discover -s . -p 'test_*.py'
 ```
 
 ---
 
-## 注意事项
+## 安全注意事项
 
-1. **凭据安全**：保存的登录网页包含临时认证会话值，请妥善保管，**切勿将包含真实会话或公司凭据的 HTML 网页提交至代码仓库**。
-2. **DNS 配置**：当前版本主要配置 IPv4 私网路由，建议直接使用内网 IP 进行访问；如需域名解析，可自行配置系统 DNS。
-3. **断开清理**：连接使用完毕后，请在终端按 `Ctrl+C` 退出程序，客户端会自动清理路由与虚拟网卡。请避免强杀进程导致残留路由规则。
+1. **凭据安全**：保存的登录网页和连接链接中包含短期认证会话值，请妥善保管。`.gitignore` 已默认过滤所有 HTML 文件及本地 `config.json`，防止敏感凭据外泄。
+2. **规范退出**：请通过应用界面的“断开 VPN”或终端的 `Ctrl + C` 正常断开连接，以便客户端执行路由清理。请尽量避免使用 `kill -9` 强杀进程导致系统临时路由残留。

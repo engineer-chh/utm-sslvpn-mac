@@ -1,6 +1,10 @@
 # Local user configuration
 config.json
 
+# Compiled macOS App Bundle
+*.app/
+*.app
+
 # Session HTML pages containing tokens/credentials
 *.html
 *.htm

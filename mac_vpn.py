@@ -34,9 +34,9 @@ def read_saved_link(path, expected_server=None, expected_port=None):
         if match:
             host, port, token = parse_link(html.unescape(match.group(1)))
             if expected_server and host != expected_server:
-                raise ValueError(f'保存页面中的服务器 ({host}) 与期望的目标服务器 ({expected_server}) 不一致')
+                raise ValueError(f'保存页面中的服务器 ({host}) 与配置的目标服务器 ({expected_server}) 不一致')
             if expected_port and port != int(expected_port):
-                raise ValueError(f'保存页面中的端口 ({port}) 与期望的目标端口 ({expected_port}) 不一致')
+                raise ValueError(f'保存页面中的端口 ({port}) 与配置的目标端口 ({expected_port}) 不一致')
             return host, port, token
     raise ValueError('未找到连接链接。请重新登录并保存完整网页及其资源文件夹')
 
@@ -52,7 +52,6 @@ def parse_config(data):
         net = str(ipaddress.IPv4Address(data[at:at+4]))
         mask = str(ipaddress.IPv4Address(data[at+4:at+8]))
         route = ipaddress.IPv4Network(net+'/'+mask, strict=False)
-        # This build is intentionally limited to private split-tunnel routes.
         allowed = any(route.subnet_of(n) for n in (
             ipaddress.IPv4Network('10.0.0.0/8'), ipaddress.IPv4Network('172.16.0.0/12'),
             ipaddress.IPv4Network('192.168.0.0/16')))
@@ -83,16 +82,25 @@ def check_ipv4(data):
     header=(data[0]&15)*4
     return header>=20 and header<=len(data) and struct.unpack_from('!H',data,2)[0]==len(data)
 
+def tun_packet(data):
+    if not check_ipv4(data):
+        return None
+    return struct.pack('!I', socket.AF_INET) + data
+
 def main():
     ap = argparse.ArgumentParser(description='macOS UTM SSLVPN 客户端；Ctrl+C 断开并清理')
     ap.add_argument('--config', default=str(DEFAULT_CONFIG_PATH) if DEFAULT_CONFIG_PATH.is_file() else None,
                     help='配置文件路径 (JSON)')
     ap.add_argument('--page', default=None,
-                    help='保存的 VPN 登录网页路径 (默认为 ~/Desktop/SSLVPN 客户端.html 或配置文件中的指定值)')
+                    help='保存的 VPN 登录网页路径 (默认为 ~/Desktop/SSLVPN 客户端.html 或配置文件指定值)')
     ap.add_argument('--link', default=None,
-                    help='直接提供 utmssl://... 连接链接 (无需保存网页)')
+                    help='直接提供 utmssl://... 连接链接')
+    ap.add_argument('--link-file', default=None,
+                    help='临时链接文件路径 (供 GUI 调用)')
+    ap.add_argument('--control-dir', default=None,
+                    help='控制目录路径 (供 GUI 调用检测停止信号)')
     ap.add_argument('--server', default=None,
-                    help='指定/校验 VPN 服务器地址 (域名或 IP)')
+                    help='指定/校验 VPN 服务器地址')
     ap.add_argument('--port', type=int, default=None,
                     help='指定/校验 VPN 隧道端口')
     ap.add_argument('--target-url', default=None,
@@ -113,7 +121,14 @@ def main():
         print('连接模式需要管理员权限创建 utun 网卡。请使用 sudo 或随附的启动脚本。')
         return 2
 
-    if args.link:
+    if args.link_file:
+        raw_link = Path(args.link_file).read_text().strip()
+        host, port, token = parse_link(raw_link)
+        if expected_server and host != expected_server:
+            raise ValueError(f'指定链接中的服务器 ({host}) 与配置的目标服务器 ({expected_server}) 不一致')
+        if expected_port and port != int(expected_port):
+            raise ValueError(f'指定链接中的端口 ({port}) 与配置的目标端口 ({expected_port}) 不一致')
+    elif args.link:
         host, port, token = parse_link(args.link)
         if expected_server and host != expected_server:
             raise ValueError(f'指定链接中的服务器 ({host}) 与配置的目标服务器 ({expected_server}) 不一致')
@@ -142,7 +157,6 @@ def main():
         tun, name = open_utun()
         run('/sbin/ifconfig', name, 'inet', address, peer, 'netmask', '255.255.255.255', 'mtu', '1400', 'up')
         for route in routes:
-            # Never replace existing routes. An overlap/error aborts and rolls back our additions.
             run('/sbin/route', '-n', 'add', '-net', str(route), '-interface', name)
             added.append(str(route))
         print('隧道已启动。保持此窗口打开；按 Ctrl+C 断开。', flush=True)
@@ -153,14 +167,17 @@ def main():
 
         tx = rx = 0; last = time.monotonic()
         while True:
+            if args.control_dir and (Path(args.control_dir) / 'stop').exists():
+                break
             ready, _, _ = select.select([tun, conn], [], [], 1)
             if conn in ready or conn.pending():
                 kind, packet = read_frame(conn)
                 if kind == 0:
-                    if not check_ipv4(packet): raise ValueError('收到无效 IPv4 数据包')
-                    written = tun.send(struct.pack('!I', socket.AF_INET) + packet)
-                    if written != len(packet) + 4: raise OSError('虚拟网卡写入不完整')
-                    rx += 1
+                    output = tun_packet(packet)
+                    if output is not None:
+                        written = tun.send(output)
+                        if written != len(output): raise OSError('虚拟网卡写入不完整')
+                        rx += 1
                 elif kind == 0x201:
                     if packet != data: raise ValueError('服务器变更配置，请重新连接')
                 elif kind != 1: raise ValueError('收到尚未支持的控制报文')
