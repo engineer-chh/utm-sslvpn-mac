@@ -1,10 +1,10 @@
 import Cocoa
 import UniformTypeIdentifiers
 
-final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
+final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTextFieldDelegate {
     var window: NSWindow!
     
-    // Configuration Fields (Empty by default for complete sanitization)
+    // Configuration Fields (No default values, no placeholder hints)
     let serverField = NSTextField()
     let portField = NSTextField()
     let loginPathField = NSTextField()
@@ -34,7 +34,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         )
     }
     
-    func makeFieldRow(labelText: String, field: NSTextField, placeholder: String) -> NSStackView {
+    func makeFieldRow(labelText: String, field: NSTextField) -> NSStackView {
         let label = NSTextField(labelWithString: labelText)
         label.alignment = .right
         label.font = .systemFont(ofSize: 12)
@@ -42,11 +42,12 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         label.translatesAutoresizingMaskIntoConstraints = false
         label.widthAnchor.constraint(equalToConstant: 90).isActive = true
         
-        field.placeholderString = placeholder
         field.font = .systemFont(ofSize: 12)
         field.bezelStyle = .roundedBezel
         field.isEditable = true
         field.isSelectable = true
+        field.delegate = self
+        field.placeholderString = ""
         field.translatesAutoresizingMaskIntoConstraints = false
         field.widthAnchor.constraint(equalToConstant: 450).isActive = true
         
@@ -63,8 +64,6 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         
         // Setup Main Menu with standard Edit menu to enable ⌘V, ⌘C, ⌘X, ⌘A
         setupMainMenu()
-        
-        loadInitialConfig()
         
         // Main Window setup
         window = NSWindow(
@@ -105,15 +104,18 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         detailLabel.maximumNumberOfLines = 3
         container.addArrangedSubview(detailLabel)
         
-        // Configuration Section
+        // Configuration Section (hints removed)
         let configSectionTitle = NSTextField(labelWithString: "连接参数配置：")
         configSectionTitle.font = .systemFont(ofSize: 13, weight: .bold)
         configSectionTitle.textColor = .labelColor
         container.addArrangedSubview(configSectionTitle)
         
-        container.addArrangedSubview(makeFieldRow(labelText: "服务器地址:", field: serverField, placeholder: "例如: 118.249.86.190 或 vpn.example.com"))
-        container.addArrangedSubview(makeFieldRow(labelText: "隧道端口:", field: portField, placeholder: "例如: 10443"))
-        container.addArrangedSubview(makeFieldRow(labelText: "登录页路径:", field: loginPathField, placeholder: "/internal-server/pages/index.html (留空使用默认)"))
+        container.addArrangedSubview(makeFieldRow(labelText: "服务器地址:", field: serverField))
+        container.addArrangedSubview(makeFieldRow(labelText: "隧道端口:", field: portField))
+        container.addArrangedSubview(makeFieldRow(labelText: "登录页路径:", field: loginPathField))
+        
+        // Load config into fields
+        loadInitialConfig()
         
         // Action Buttons
         let loginButton = NSButton(title: "① 打开 VPN 登录页", target: self, action: #selector(openLoginPage))
@@ -205,23 +207,33 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.mainMenu = mainMenu
     }
     
-    // MARK: - Configuration Handling (Desensitized, no hardcoded defaults)
+    // MARK: - NSTextFieldDelegate (Real-time auto-saving)
+    func controlTextDidChange(_ obj: Notification) {
+        persistCurrentConfig()
+    }
+    
+    // MARK: - Configuration Handling & Persistence
     func loadInitialConfig() {
         let defaults = UserDefaults.standard
         pagePath = defaults.string(forKey: "page") ?? (NSHomeDirectory() + "/Desktop/SSLVPN 客户端.html")
         
-        // Clear previous legacy hardcoded values if any
-        if defaults.string(forKey: "server") == "118.249.86.190" {
-            defaults.removeObject(forKey: "server")
-            defaults.removeObject(forKey: "port")
-            defaults.removeObject(forKey: "login_path")
-            defaults.removeObject(forKey: "target_url")
+        var s = defaults.string(forKey: "server") ?? ""
+        var p = defaults.string(forKey: "port") ?? ""
+        var lp = defaults.string(forKey: "login_path") ?? ""
+        
+        // Fallback to ~/.utmssl_config.json if UserDefaults has not stored it yet
+        let cfgUrl = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".utmssl_config.json")
+        if (s.isEmpty || p.isEmpty), let data = try? Data(contentsOf: cfgUrl),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            if s.isEmpty, let serverVal = json["server"] as? String { s = serverVal }
+            if p.isEmpty, let portVal = json["port"] as? String { p = portVal }
+            else if p.isEmpty, let portInt = json["port"] as? Int, portInt > 0 { p = String(portInt) }
+            if lp.isEmpty, let pathVal = json["login_path"] as? String { lp = pathVal }
         }
         
-        // By default, start with clean, blank input fields
-        serverField.stringValue = defaults.string(forKey: "server") ?? ""
-        portField.stringValue = defaults.string(forKey: "port") ?? ""
-        loginPathField.stringValue = defaults.string(forKey: "login_path") ?? ""
+        serverField.stringValue = s
+        portField.stringValue = p
+        loginPathField.stringValue = lp
     }
     
     func persistCurrentConfig() {
@@ -229,10 +241,24 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let s = serverField.stringValue.trimmingCharacters(in: .whitespaces)
         let p = portField.stringValue.trimmingCharacters(in: .whitespaces)
         let lp = loginPathField.stringValue.trimmingCharacters(in: .whitespaces)
-        if !s.isEmpty { defaults.set(s, forKey: "server") }
-        if !p.isEmpty { defaults.set(p, forKey: "port") }
-        if !lp.isEmpty { defaults.set(lp, forKey: "login_path") }
+        
+        defaults.set(s, forKey: "server")
+        defaults.set(p, forKey: "port")
+        defaults.set(lp, forKey: "login_path")
         defaults.set(pagePath, forKey: "page")
+        defaults.synchronize()
+        
+        // Also persist to ~/.utmssl_config.json for stable cross-session persistence
+        let cfgUrl = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".utmssl_config.json")
+        let dict: [String: Any] = [
+            "server": s,
+            "port": p,
+            "login_path": lp,
+            "page": pagePath
+        ]
+        if let data = try? JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted]) {
+            try? data.write(to: cfgUrl, options: .atomic)
+        }
     }
     
     func refreshSourceInfo() {
@@ -560,6 +586,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        persistCurrentConfig()
         if process == nil { return .terminateNow }
         isQuitting = true
         stopConnection()
@@ -567,6 +594,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     
     func windowShouldClose(_ sender: NSWindow) -> Bool {
+        persistCurrentConfig()
         NSApp.terminate(nil)
         return false
     }
