@@ -2,7 +2,7 @@
 
 纯原生、零外部依赖的 macOS UTM3.0 SSLVPN 客户端，提供 **原生图形界面 (App)** 与 **轻量级命令行 (CLI)** 双模式支持。
 
-- **原生 GUI 交互**：内置 Swift 开发的 Cocoa 图形界面，支持在窗口内直接配置服务器、端口与业务地址，支持浏览器 `utmssl://` 协议回调自动捕获会话。
+- **原生 GUI 交互**：内置 Swift 开发的 Cocoa 图形界面，支持在窗口内直接配置服务器与端口，支持浏览器 `utmssl://` 协议回调自动捕获会话。
 - **零外部依赖**：基于 macOS 自带的 `/usr/bin/python3` 与原生系统网络接口（`utun` 虚拟网卡），无需 `pip install` 任何第三方包。
 - **一键打包**：提供自动化构建脚本，利用系统自带的 `swiftc` 编译器即可秒级构建独立的 `.app` 应用程序。
 - **安全与私网分流**：
@@ -30,14 +30,14 @@
    - 打开应用后，在“连接参数配置”区域填入：
      - **服务器地址**：例如 `118.249.86.190` 或 VPN 域名
      - **隧道端口**：例如 `10443`
-     - **工作系统 URL**：连接成功后需要访问的内网业务地址（例如 `http://192.168.0.62:8090/mc/login-mc.html`）
+     - **登录页路径**：默认为 `/internal-server/pages/index.html`
    - 参数会在连接时自动保存至 macOS 用户偏好中，下次打开自动加载。
 2. **日常连接流程**：
    - 点击 **“① 打开 VPN 登录页”**，浏览器将自动弹出公司 VPN 门户。
    - 在网页中正常输入账号、密码并登录。
    - 登录成功后，在网页上点击“连接”，浏览器会询问是否允许打开应用，点击允许。
    - 回到应用界面，点击 **“连接 VPN”**，在 macOS 授权弹窗中输入锁屏密码。
-   - 界面变为 **“● 已连接”** 后，点击旁边亮起的 **“打开工作系统”** 即可直接访问内网。
+   - 界面变为 **“● 已连接”**，此时系统已安全建立隧道并接入私网路由。
 3. **断开连接**：
    - 点击界面上的 **“断开 VPN”** 或直接按 `⌘ + Q` 退出应用，程序将自动还原网络路由与虚拟网卡。
 
@@ -57,7 +57,6 @@ cp config.example.json config.json
 {
   "server": "118.249.86.190",
   "port": 10443,
-  "target_url": "http://192.168.0.62:8090/mc/login-mc.html",
   "default_page": "~/Desktop/SSLVPN 客户端.html"
 }
 ```
@@ -81,7 +80,7 @@ sudo /usr/bin/python3 mac_vpn.py --link "utmssl://服务器:端口/conn?会话�
 ```text
 用法: mac_vpn.py [-h] [--config CONFIG] [--page PAGE] [--link LINK]
                   [--link-file LINK_FILE] [--control-dir CONTROL_DIR]
-                  [--server SERVER] [--port PORT] [--target-url TARGET_URL] [--probe]
+                  [--server SERVER] [--port PORT] [--probe]
 
 可选参数:
   --config CONFIG        配置文件路径 (JSON)
@@ -89,7 +88,6 @@ sudo /usr/bin/python3 mac_vpn.py --link "utmssl://服务器:端口/conn?会话�
   --link LINK            直接传入 utmssl://... 连接链接 (无需保存网页)
   --server SERVER        指定/校验 VPN 服务器域名或 IP
   --port PORT            指定/校验 VPN 隧道端口
-  --target-url URL       连接建立成功后提示打开的内网业务地址
   --probe                仅探测握手与会话有效性，不修改系统路由与网卡
 ```
 

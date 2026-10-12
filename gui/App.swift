@@ -8,14 +8,12 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let serverField = NSTextField()
     let portField = NSTextField()
     let loginPathField = NSTextField()
-    let targetUrlField = NSTextField()
     
     // Status & Feedback
     let statusLabel = NSTextField(labelWithString: "未连接")
     let detailLabel = NSTextField(wrappingLabelWithString: "配置服务器参数后，点击“① 打开 VPN 登录页”进行登录。")
     let pathLabel = NSTextField(labelWithString: "")
     let connectButton = NSButton(title: "连接 VPN", target: nil, action: nil)
-    let openWorkButton = NSButton(title: "打开工作系统", target: nil, action: nil)
     let logView = NSTextView()
     
     var pagePath: String = ""
@@ -74,7 +72,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         
         // Main Window setup
         window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 620, height: 680),
+            contentRect: NSRect(x: 0, y: 0, width: 620, height: 600),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -120,9 +118,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         container.addArrangedSubview(makeFieldRow(labelText: "服务器地址:", field: serverField, placeholder: "例如: 118.249.86.190 或 vpn.example.com"))
         container.addArrangedSubview(makeFieldRow(labelText: "隧道端口:", field: portField, placeholder: "例如: 10443"))
         container.addArrangedSubview(makeFieldRow(labelText: "登录页路径:", field: loginPathField, placeholder: "默认为: /internal-server/pages/index.html"))
-        container.addArrangedSubview(makeFieldRow(labelText: "工作系统 URL:", field: targetUrlField, placeholder: "例如: http://192.168.0.62:8090/mc/login-mc.html"))
         
-        // Buttons
+        // Action Buttons
         let loginButton = NSButton(title: "① 打开 VPN 登录页", target: self, action: #selector(openLoginPage))
         loginButton.bezelStyle = .rounded
         container.addArrangedSubview(loginButton)
@@ -131,17 +128,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         connectButton.action = #selector(toggleConnection)
         connectButton.bezelStyle = .rounded
         connectButton.controlSize = .large
-        
-        openWorkButton.target = self
-        openWorkButton.action = #selector(openWorkSystem)
-        openWorkButton.bezelStyle = .rounded
-        openWorkButton.isEnabled = false
-        
-        let actionRow = NSStackView(views: [connectButton, openWorkButton])
-        actionRow.orientation = .horizontal
-        actionRow.alignment = .centerY
-        actionRow.spacing = 12
-        container.addArrangedSubview(actionRow)
+        container.addArrangedSubview(connectButton)
         
         // Fallback & Repair Row
         let repairButton = NSButton(title: "清理旧连接", target: self, action: #selector(repairOldConnections))
@@ -199,18 +186,15 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let savedServer = defaults.string(forKey: "server") ?? ""
         let savedPort = defaults.string(forKey: "port") ?? ""
         let savedLoginPath = defaults.string(forKey: "login_path") ?? "/internal-server/pages/index.html"
-        let savedTargetUrl = defaults.string(forKey: "target_url") ?? ""
         pagePath = defaults.string(forKey: "page") ?? (NSHomeDirectory() + "/Desktop/SSLVPN 客户端.html")
         
         if !savedServer.isEmpty {
             serverField.stringValue = savedServer
             portField.stringValue = savedPort
             loginPathField.stringValue = savedLoginPath
-            targetUrlField.stringValue = savedTargetUrl
             return
         }
         
-        // Try reading config.json from bundle resources or parent directory
         let searchURLs = [
             Bundle.main.resourceURL?.appendingPathComponent("config.json"),
             Bundle.main.bundleURL.deletingLastPathComponent().appendingPathComponent("config.json")
@@ -222,7 +206,6 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 if let s = json["server"] as? String { serverField.stringValue = s }
                 if let p = json["port"] as? Int, p > 0 { portField.stringValue = String(p) }
                 if let lp = json["login_path"] as? String { loginPathField.stringValue = lp }
-                if let tu = json["target_url"] as? String { targetUrlField.stringValue = tu }
                 if let dp = json["default_page"] as? String, !dp.isEmpty {
                     pagePath = (dp as NSString).expandingTildeInPath
                 }
@@ -239,7 +222,6 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         defaults.set(serverField.stringValue.trimmingCharacters(in: .whitespaces), forKey: "server")
         defaults.set(portField.stringValue.trimmingCharacters(in: .whitespaces), forKey: "port")
         defaults.set(loginPathField.stringValue.trimmingCharacters(in: .whitespaces), forKey: "login_path")
-        defaults.set(targetUrlField.stringValue.trimmingCharacters(in: .whitespaces), forKey: "target_url")
         defaults.set(pagePath, forKey: "page")
     }
     
@@ -304,16 +286,6 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if let url = URL(string: urlStr) {
             NSWorkspace.shared.open(url)
             detailLabel.stringValue = "已在浏览器中打开登录页面，登录后点击网页上的“连接”即可。"
-        }
-    }
-    
-    @objc func openWorkSystem() {
-        persistCurrentConfig()
-        let workUrl = targetUrlField.stringValue.trimmingCharacters(in: .whitespaces)
-        if let url = URL(string: workUrl), !workUrl.isEmpty {
-            NSWorkspace.shared.open(url)
-        } else {
-            detailLabel.stringValue = "工作系统 URL 尚未配置或格式不正确。"
         }
     }
     
@@ -399,11 +371,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             // Create config.json in temp dir
             let server = serverField.stringValue.trimmingCharacters(in: .whitespaces)
             let port = Int(portField.stringValue.trimmingCharacters(in: .whitespaces)) ?? 0
-            let targetUrl = targetUrlField.stringValue.trimmingCharacters(in: .whitespaces)
             let configDict: [String: Any] = [
                 "server": server,
-                "port": port,
-                "target_url": targetUrl
+                "port": port
             ]
             let configJsonData = try JSONSerialization.data(withJSONObject: configDict, options: .prettyPrinted)
             try configJsonData.write(to: tempDir.appendingPathComponent("config.json"))
@@ -478,9 +448,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             isConnected = true
             statusLabel.stringValue = "● 已连接"
             statusLabel.textColor = .systemGreen
-            detailLabel.stringValue = "内网隧道已就绪。点击“打开工作系统”或在浏览器中访问受保护资产。"
+            detailLabel.stringValue = "内网隧道已就绪，已成功接入私网路由。用完后点击“断开 VPN”。"
             connectButton.title = "断开 VPN"
-            openWorkButton.isEnabled = true
         }
     }
     
@@ -488,7 +457,6 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard let dir = controlDir else { return }
         isStopping = true
         statusLabel.stringValue = "正在断开…"
-        openWorkButton.isEnabled = false
         connectButton.isEnabled = false
         try? Data().write(to: dir.appendingPathComponent("stop"))
         detailLabel.stringValue = "正在关闭隧道并清理临时路由..."
@@ -500,7 +468,6 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         pollTimer = nil
         process = nil
         isConnected = false
-        openWorkButton.isEnabled = false
         connectButton.title = "连接 VPN"
         connectButton.isEnabled = true
         statusLabel.stringValue = "未连接"

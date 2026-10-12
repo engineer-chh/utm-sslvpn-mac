@@ -103,8 +103,6 @@ def main():
                     help='指定/校验 VPN 服务器地址')
     ap.add_argument('--port', type=int, default=None,
                     help='指定/校验 VPN 隧道端口')
-    ap.add_argument('--target-url', default=None,
-                    help='连接成功后提示打开的内网业务系统 URL')
     ap.add_argument('--probe', action='store_true',
                     help='仅握手与认证探测，不创建 utun 网卡和路由')
     args = ap.parse_args()
@@ -114,7 +112,6 @@ def main():
     cfg = load_config(args.config)
     expected_server = args.server or cfg.get('server')
     expected_port = args.port or cfg.get('port')
-    target_url = args.target_url or cfg.get('target_url')
     page_path = args.page or cfg.get('default_page') or str(Path.home() / 'Desktop/SSLVPN 客户端.html')
 
     if not args.probe and os.geteuid() != 0:
@@ -160,10 +157,7 @@ def main():
             run('/sbin/route', '-n', 'add', '-net', str(route), '-interface', name)
             added.append(str(route))
         print('隧道已启动。保持此窗口打开；按 Ctrl+C 断开。', flush=True)
-        if target_url:
-            print(f'在浏览器打开业务系统：{target_url}', flush=True)
-        else:
-            print('内网路由已就绪，可直接访问受内网保护的业务系统。', flush=True)
+        print('内网路由已就绪，可直接访问受内网保护的业务系统。', flush=True)
 
         tx = rx = 0; last = time.monotonic()
         while True:
